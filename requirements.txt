@@ -1,5 +1,5 @@
 streamlit
 pandas
-
 python-telegram-bot
+streamlit-lottie
 streamlit-option-menu
