@@ -3,118 +3,221 @@ import pandas as pd
 import sqlite3
 import requests
 import time
-import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
-import threading
+from streamlit_lottie import st_lottie
+from streamlit_option_menu import option_menu
 
-# --- إعدادات الصفحة ---
-st.set_page_config(page_title="نظام تذاكر IT", page_icon="🌐", layout="wide")
+# --- 1. إعدادات الصفحة ---
+st.set_page_config(
+    page_title="IT Command Center",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed"  # سنخفي القائمة الجانبية لجمالية أكثر
+)
 
-# 🔴 ضع التوكين هنا 🔴
-TOKEN = "8560214645:AAFxskBVliT-KF5RJcNwCA2GNAv3Pqsgizw" 
+# --- 2. المتغيرات والاتصال ---
+# 🔴🔴🔴 ضع التوكين هنا 🔴🔴🔴
+TOKEN = "YOUR_TOKEN_HERE" 
 
-# --- تجهيز قاعدة البيانات ---
-def init_db():
-    conn = sqlite3.connect('tickets.db', check_same_thread=False)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS tickets
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_id INTEGER, username TEXT, issue_type TEXT, location TEXT, phone TEXT, description TEXT, status TEXT DEFAULT 'جديد', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit()
-    conn.close()
+# روابط الانيميشن
+LOTTIE_DASHBOARD = "https://lottie.host/5a092797-3932-4cc7-b644-245842812260/p6S0j5Yg7t.json"
+LOTTIE_LOADING = "https://assets9.lottiefiles.com/packages/lf20_p8bfn5to.json"
 
-init_db()
+# --- 3. تصميم CSS الخرافي (Glassmorphism) ---
+st.markdown("""
+<style>
+    /* استيراد خط تجوال العصري */
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;500;700;900&display=swap');
 
-# --- دوال البوت (Telegram Logic) ---
-TYPE, LOCATION, PHONE, DESCRIPTION = range(4)
+    * { font-family: 'Tajawal', sans-serif; }
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[InlineKeyboardButton("🖥️ حاسبة", callback_data='Hardware'), InlineKeyboardButton("🌐 شبكة", callback_data='Network')],
-                [InlineKeyboardButton("🖨️ طابعة", callback_data='Printer'), InlineKeyboardButton("💾 برمجيات", callback_data='Software')]]
-    await update.message.reply_text("مرحباً بك في دعم IT. اختر نوع المشكلة:", reply_markup=InlineKeyboardMarkup(keyboard))
-    return TYPE
+    /* خلفية متدرجة احترافية */
+    .stApp {
+        background: linear-gradient(135deg, #1e1e2f 0%, #252540 100%);
+    }
 
-async def get_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    context.user_data['type'] = query.data
-    await query.edit_message_text(f"تم اختيار: {query.data}\nالرجاء كتابة المكان (القسم/الغرفة):")
-    return LOCATION
+    /* كروت الإحصائيات (Metrics) */
+    div[data-testid="metric-container"] {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        transition: transform 0.2s;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-5px);
+        border-color: #00d2ff;
+    }
+    label[data-testid="stMetricLabel"] { color: #a6a6c3 !important; font-size: 1.1rem !important; }
+    div[data-testid="stMetricValue"] { color: #fff !important; font-size: 2.5rem !important; text-shadow: 0 0 10px rgba(0,210,255,0.5); }
 
-async def get_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['location'] = update.message.text
-    await update.message.reply_text("رقم الهاتف الأرضي (أو اكتب 'لا يوجد'):")
-    return PHONE
+    /* تحسين البطاقات (Expanders) */
+    .streamlit-expanderHeader {
+        background-color: rgba(255, 255, 255, 0.03) !important;
+        border-radius: 10px !important;
+        color: white !important;
+        font-weight: bold;
+    }
+    
+    div[data-testid="stExpander"] {
+        border: none;
+        background: rgba(30, 30, 47, 0.7);
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        margin-bottom: 15px;
+        border-right: 5px solid #444; /* Default border */
+    }
 
-async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['phone'] = update.message.text
-    await update.message.reply_text("صف المشكلة باختصار:")
-    return DESCRIPTION
+    /* أزرار ملونة */
+    div.stButton > button {
+        background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:hover {
+        box-shadow: 0 0 15px #00d2ff;
+        transform: scale(1.02);
+    }
+    
+    /* جعل النصوص تظهر من اليمين لليسار */
+    .block-container { direction: rtl; }
+    
+</style>
+""", unsafe_allow_html=True)
 
-async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-    data = context.user_data
-    conn = sqlite3.connect('tickets.db', check_same_thread=False)
-    c = conn.cursor()
-    c.execute("INSERT INTO tickets (user_id, username, issue_type, location, phone, description) VALUES (?, ?, ?, ?, ?, ?)",
-              (user.id, user.first_name, data['type'], data['location'], data['phone'], update.message.text))
-    conn.commit()
-    conn.close()
-    await update.message.reply_text("✅ تم فتح التذكرة! سيتم التواصل معك.")
-    return ConversationHandler.END
+# --- 4. الدوال المساعدة ---
+def load_lottieurl(url):
+    r = requests.get(url)
+    if r.status_code != 200: return None
+    return r.json()
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("تم الإلغاء.")
-    return ConversationHandler.END
-
-# --- تشغيل البوت في الخلفية ---
-def run_bot():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    app = Application.builder().token(TOKEN).build()
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            TYPE: [CallbackQueryHandler(get_type)],
-            LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_location)],
-            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
-            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_description)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    app.add_handler(conv_handler)
-    app.run_polling()
-
-# هذه الدالة تضمن تشغيل البوت مرة واحدة فقط عند فتح الموقع
-if 'bot_started' not in st.session_state:
-    st.session_state['bot_started'] = True
-    t = threading.Thread(target=run_bot, daemon=True)
-    t.start()
-
-# --- واجهة الموقع (Dashboard) ---
 def get_data():
-    conn = sqlite3.connect('tickets.db', check_same_thread=False)
+    conn = sqlite3.connect('tickets.db')
     df = pd.read_sql_query("SELECT * FROM tickets ORDER BY id DESC", conn)
     conn.close()
     return df
 
-st.title("🌐 نظام إدارة الـ IT (Online)")
-st.caption("يعمل 24/7 ومتاح من أي مكان")
+def update_status(ticket_id, new_status):
+    conn = sqlite3.connect('tickets.db')
+    c = conn.cursor()
+    c.execute("UPDATE tickets SET status = ? WHERE id = ?", (new_status, ticket_id))
+    conn.commit()
+    conn.close()
 
-if st.button('🔄 تحديث'):
-    st.rerun()
+def send_telegram_message(user_id, message):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {"chat_id": user_id, "text": message}
+    try: requests.post(url, json=payload); return True
+    except: return False
+
+# --- 5. الهيكل الرئيسي للواجهة ---
+
+# شريط التنقل العلوي (حديث جداً)
+selected = option_menu(
+    menu_title=None,
+    options=["الرئيسية", "التذاكر النشطة", "الأرشيف", "إعدادات"],
+    icons=["speedometer2", "list-task", "archive", "gear"],
+    menu_icon="cast",
+    default_index=0,
+    orientation="horizontal",
+    styles={
+        "container": {"padding": "0!important", "background-color": "transparent"},
+        "icon": {"color": "#00d2ff", "font-size": "18px"}, 
+        "nav-link": {"font-size": "16px", "text-align": "center", "margin": "0px", "--hover-color": "#2c2c42"},
+        "nav-link-selected": {"background-color": "#252540", "border-bottom": "3px solid #00d2ff"},
+    }
+)
 
 df = get_data()
-if not df.empty:
-    for index, row in df.iterrows():
-        with st.expander(f"تذكرة #{row['id']} | {row['issue_type']} | {row['username']}"):
-            st.write(f"**المشكلة:** {row['description']}")
-            st.write(f"**الموقع:** {row['location']}")
-            # زر الرد البسيط (بدون انتظار النتيجة لتجنب التعليق)
-            reply = st.text_input("الرد:", key=str(row['id']))
-            if st.button("إرسال", key=f"btn_{row['id']}"):
-                requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": row['user_id'], "text": reply})
-                st.success("تم الإرسال!")
-else:
-    st.info("لا توجد تذاكر حالياً")
+
+# ================= صفحة الرئيسية (Dashboard) =================
+if selected == "الرئيسية":
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown("<h1 style='color: white;'>🚀 مركز القيادة الرقمي</h1>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #a6a6c3;'>مرحباً بك في الجيل الجديد من إدارة الدعم الفني.</h4>", unsafe_allow_html=True)
+    with col2:
+        lottie_dash = load_lottieurl(LOTTIE_DASHBOARD)
+        st_lottie(lottie_dash, height=150, key="dash_anim")
+
+    st.markdown("---")
+
+    # بطاقات الإحصائيات المضيئة (KPIs)
+    if not df.empty:
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("إجمالي الطلبات", len(df), "+2 اليوم")
+        k2.metric("🔴 تذاكر جديدة", len(df[df['status'] == 'جديد']), "حرج", delta_color="inverse")
+        k3.metric("🟡 قيد العمل", len(df[df['status'] == 'قيد العمل']))
+        k4.metric("✅ المكتملة", len(df[df['status'] == 'مغلق']))
+    
+    # رسوم بيانية سريعة (تحتاج دالة بسيطة)
+    st.markdown("### 📊 تحليل الأداء السريع")
+    c1, c2 = st.columns(2)
+    with c1:
+        if not df.empty:
+            st.bar_chart(df['issue_type'].value_counts())
+            st.caption("توزيع المشاكل حسب النوع")
+    with c2:
+         if not df.empty:
+            st.line_chart(df['created_at'].value_counts()) # مجرد مثال، يحتاج معالجة تواريخ ليكون دقيقاً
+            st.caption("نشاط التذاكر عبر الزمن")
+
+# ================= صفحة التذاكر النشطة =================
+elif selected == "التذاكر النشطة":
+    st.markdown("<h2 style='text-align: center; color: #00d2ff;'>⚡ قائمة المهام الحالية</h2>", unsafe_allow_html=True)
+    
+    # فلتر سريع
+    col_filter, col_refresh = st.columns([4, 1])
+    with col_refresh:
+        if st.button("تحديث 🔄"): st.rerun()
+    
+    active_df = df[df['status'] != 'مغلق']
+    
+    if active_df.empty:
+        st.success("🎉 لا توجد مهام! استمتع بوقتك.")
+    else:
+        for i, row in active_df.iterrows():
+            # تحديد لون الجانب حسب الحالة
+            status_color = "#ff4b4b" if row['status'] == 'جديد' else "#ffa421"
+            
+            # حقن CSS خاص لكل بطاقة لتلوين الحافة
+            st.markdown(f"""
+            <style>
+            div[data-testid="stExpander"]:nth-child({i+2}) {{
+                border-right: 5px solid {status_color} !important;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
+
+            with st.expander(f"🎫 تذكرة #{row['id']} | {row['issue_type']} | {row['username']}"):
+                c1, c2 = st.columns([2, 1])
+                with c1:
+                    st.markdown(f"#### 📝 {row['description']}")
+                    st.markdown(f"**📍 الموقع:** `{row['location']}`  |  **📞 هاتف:** `{row['phone']}`")
+                    st.caption(f"🕒 {row['created_at']}")
+                
+                with c2:
+                    st.markdown("##### ⚙️ الإجراءات")
+                    new_st = st.selectbox("تحديث الحالة", ["جديد", "قيد العمل", "مغلق"], key=f"s_{row['id']}", label_visibility="collapsed")
+                    if new_st != row['status']:
+                        update_status(row['id'], new_st)
+                        st.rerun()
+                    
+                    rep = st.text_input("الرد السريع", placeholder="اكتب ردك...", key=f"r_{row['id']}", label_visibility="collapsed")
+                    if st.button("إرسال الرد 🚀", key=f"b_{row['id']}"):
+                        if send_telegram_message(row['user_id'], f"تحديث: {rep}"): st.toast("تم الإرسال!", icon="✅")
+
+# ================= صفحة الأرشيف =================
+elif selected == "الأرشيف":
+    st.markdown("### 🗄️ سجل العمليات السابق")
+    closed_df = df[df['status'] == 'مغلق']
+    st.dataframe(closed_df, use_container_width=True)
+
+# ================= صفحة الإعدادات (شكلية) =================
+elif selected == "إعدادات":
+    st.info("هنا يمكن إضافة إعدادات لإضافة موظفين جدد أو تغيير التنبيهات مستقبلاً.")
