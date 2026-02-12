@@ -16,7 +16,7 @@ st.set_page_config(
 
 # --- 2. المتغيرات والاتصال ---
 # 🔴🔴🔴 ضع التوكين هنا 🔴🔴🔴
-TOKEN = "YOUR_TOKEN_HERE" 
+TOKEN = "8560214645:AAFxskBVliT-KF5RJcNwCA2GNAv3Pqsgizw" 
 
 # روابط الانيميشن
 LOTTIE_DASHBOARD = "https://lottie.host/5a092797-3932-4cc7-b644-245842812260/p6S0j5Yg7t.json"
@@ -92,9 +92,13 @@ st.markdown("""
 
 # --- 4. الدوال المساعدة ---
 def load_lottieurl(url):
-    r = requests.get(url)
-    if r.status_code != 200: return None
-    return r.json()
+    try:
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except:
+        return None
 
 def get_data():
     conn = sqlite3.connect('tickets.db')
@@ -221,3 +225,4 @@ elif selected == "الأرشيف":
 # ================= صفحة الإعدادات (شكلية) =================
 elif selected == "إعدادات":
     st.info("هنا يمكن إضافة إعدادات لإضافة موظفين جدد أو تغيير التنبيهات مستقبلاً.")
+
