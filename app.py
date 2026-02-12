@@ -19,7 +19,7 @@ st.set_page_config(
 )
 
 # 🔴🔴🔴 هام جداً: ضع التوكين الخاص بك هنا بين علامتي التنصيص 🔴🔴🔴
-TOKEN = "8560214645:AAFxskBVliT-KF5RJcNwCA2GNAv3Pqsgizw" 
+TOKEN = "7690158561:AAH9kiOjUNZIErzlWUtYdAzOThRGRLoBkLc" 
 
 # --- 2. إعداد قاعدة البيانات (لضمان عملها في السحابة) ---
 def init_db():
@@ -223,4 +223,5 @@ elif selected == "التذاكر النشطة":
 elif selected == "الأرشيف":
     st.markdown("### 🗄️ الأرشيف")
     st.dataframe(df[df['status'] == 'مغلق'], use_container_width=True)
+
 
