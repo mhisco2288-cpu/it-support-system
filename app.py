@@ -146,8 +146,14 @@ if selected == "الرئيسية":
         st.markdown("<h1 style='color: white;'>🚀 مركز القيادة الرقمي</h1>", unsafe_allow_html=True)
         st.markdown("<h4 style='color: #a6a6c3;'>مرحباً بك في الجيل الجديد من إدارة الدعم الفني.</h4>", unsafe_allow_html=True)
     with col2:
-        lottie_dash = load_lottieurl(LOTTIE_DASHBOARD)
-        st_lottie(lottie_dash, height=150, key="dash_anim")
+        try:
+            lottie_dash = load_lottieurl(LOTTIE_DASHBOARD)
+            if lottie_dash:
+                st_lottie(lottie_dash, height=150, key="dash_anim")
+            else:
+                st.write("📊") # بديل بسيط إذا فشل التحميل
+        except:
+            st.write("📊")
 
     st.markdown("---")
 
@@ -225,4 +231,5 @@ elif selected == "الأرشيف":
 # ================= صفحة الإعدادات (شكلية) =================
 elif selected == "إعدادات":
     st.info("هنا يمكن إضافة إعدادات لإضافة موظفين جدد أو تغيير التنبيهات مستقبلاً.")
+
 
