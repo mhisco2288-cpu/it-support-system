@@ -6,21 +6,26 @@ import time
 import asyncio
 import threading
 import nest_asyncio
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
-from streamlit_lottie import st_lottie
 from streamlit_option_menu import option_menu
 
-# تطبيق إصلاح الحلقات (ضروري جداً للسحابة)
+# تطبيق إصلاح الحلقات
 nest_asyncio.apply()
 
 # --- 1. إعدادات الصفحة ---
 st.set_page_config(page_title="IT Center", page_icon="🔧", layout="wide", initial_sidebar_state="collapsed")
 
-# 🔴🔴🔴 ضع التوكين الجديد هنا 🔴🔴🔴
-TOKEN = "7690158561:AAH9kiOjUNZIErzlWUtYdAzOThRGRLoBkLc" 
+# 🔴🔴🔴 هام: ضع التوكين الجديد هنا 🔴🔴🔴
+TOKEN = "7690158561:AAH9kiOjUNZIErzlWUtYdAzOThRGRLoBkLc"
 
-# --- 2. قاعدة البيانات ---
+# --- 2. إدارة الأخطاء (Logger) ---
+def log_error(msg):
+    with open("bot_error.log", "w") as f:
+        f.write(str(msg))
+
+# --- 3. قاعدة البيانات ---
 def init_db():
     conn = sqlite3.connect('tickets.db', check_same_thread=False)
     c = conn.cursor()
@@ -30,7 +35,7 @@ def init_db():
     conn.close()
 init_db()
 
-# --- 3. البوت (Telegram) ---
+# --- 4. منطق البوت ---
 TYPE, LOCATION, PHONE, DESCRIPTION = range(4)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -68,58 +73,84 @@ async def get_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
         tid = c.lastrowid
         conn.close()
         await update.message.reply_text(f"✅ تم فتح التذكرة #{tid}")
-    except: await update.message.reply_text("خطأ في النظام!")
+    except Exception as e:
+        print(f"DB Error: {e}")
+        await update.message.reply_text("خطأ في النظام!")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("تم الإلغاء.")
     return ConversationHandler.END
 
-# --- تشغيل البوت (تم إزالة التخزين المؤقت لإصلاح المشكلة) ---
+# --- 5. تشغيل البوت (مع الحماية من الأخطاء) ---
 def run_bot_core():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    app = Application.builder().token(TOKEN).build()
-    conv = ConversationHandler(entry_points=[CommandHandler('start', start)],
-        states={TYPE: [CallbackQueryHandler(get_type)], LOCATION: [MessageHandler(filters.TEXT, get_location)],
-                PHONE: [MessageHandler(filters.TEXT, get_phone)], DESCRIPTION: [MessageHandler(filters.TEXT, get_description)]},
-        fallbacks=[CommandHandler('cancel', cancel)])
-    app.add_handler(conv)
-    app.run_polling(drop_pending_updates=True) # حذف الرسائل القديمة لمنع التعليق
+    try:
+        # إنشاء حلقة جديدة داخل الخيط
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # بناء التطبيق
+        app = Application.builder().token(TOKEN).build()
+        
+        # إضافة المعالجات
+        conv = ConversationHandler(entry_points=[CommandHandler('start', start)],
+            states={TYPE: [CallbackQueryHandler(get_type)], LOCATION: [MessageHandler(filters.TEXT, get_location)],
+                    PHONE: [MessageHandler(filters.TEXT, get_phone)], DESCRIPTION: [MessageHandler(filters.TEXT, get_description)]},
+            fallbacks=[CommandHandler('cancel', cancel)])
+        app.add_handler(conv)
+        
+        # 🔥 خطوة مهمة: حذف الويب هوك لتجنب التعليق 🔥
+        print("Cleaning webhook...")
+        loop.run_until_complete(app.bot.delete_webhook(drop_pending_updates=True))
+        
+        # التشغيل
+        print("Bot started polling...")
+        app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+        
+    except Exception as e:
+        log_error(f"FATAL ERROR: {e}") # تسجيل الخطأ لكي نراه
 
 def start_bot_monitor():
-    # فحص هل البوت يعمل؟
-    is_running = any(t.name == "BotThread" for t in threading.enumerate())
-    if not is_running:
+    if not any(t.name == "BotThread" for t in threading.enumerate()):
+        # حذف ملف الخطأ القديم إن وجد
+        if os.path.exists("bot_error.log"): os.remove("bot_error.log")
+        
         t = threading.Thread(target=run_bot_core, name="BotThread", daemon=True)
         t.start()
-        return False # كان متوقفاً وتم تشغيله
-    return True # يعمل حالياً
+        time.sleep(1) # إعطاء فرصة للتشغيل
+        return False
+    return True
 
-# تشغيل المراقب في كل تحديث للصفحة
 bot_status = start_bot_monitor()
 
-# --- 4. الواجهة (Dashboard) ---
-# CSS
+# --- 6. الواجهة ---
 st.markdown("""<style>@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap'); * { font-family: 'Tajawal', sans-serif; } .block-container { direction: rtl; }</style>""", unsafe_allow_html=True)
 
-# القائمة
 selected = option_menu(None, ["الرئيسية", "التذاكر", "الأرشيف"], icons=["house", "list", "archive"], orientation="horizontal", default_index=1)
 
-# --- مؤشر حالة البوت (للتشخيص) ---
+# === تشخيص الحالة (الأهم الآن) ===
 st.markdown("---")
-if bot_status:
+
+# 1. هل هناك خطأ مسجل؟
+if os.path.exists("bot_error.log"):
+    with open("bot_error.log", "r") as f:
+        err_msg = f.read()
+    st.error(f"🔴 البوت توقف بسبب خطأ: {err_msg}")
+    st.info("💡 الحل: تأكد أن التوكين صحيح، وأنه لا توجد مسافات زائدة فيه.")
+
+# 2. حالة التشغيل الطبيعية
+elif bot_status:
     st.success("🟢 نظام البوت: **متصل ويعمل** (Thread Active)")
 else:
-    st.warning("🟠 نظام البوت: **جاري التشغيل...** (انتظر قليلاً)")
+    st.warning("🟠 نظام البوت: **جاري تهيئة الاتصال...** (إذا استمر هذا طويلاً، اضغط تحديث)")
 
+# عرض البيانات
 def get_data():
     conn = sqlite3.connect('tickets.db', check_same_thread=False)
     df = pd.read_sql_query("SELECT * FROM tickets ORDER BY id DESC", conn)
     conn.close()
     return df
 
-# الصفحات
 if selected == "الرئيسية":
     st.title("لوحة المعلومات")
     df = get_data()
@@ -132,7 +163,7 @@ if selected == "الرئيسية":
 
 elif selected == "التذاكر":
     st.title("التذاكر النشطة")
-    if st.button("تحديث"): st.rerun()
+    if st.button("تحديث الصفحة"): st.rerun()
     df = get_data()
     active = df[df['status'] != 'مغلق']
     if active.empty: st.success("لا توجد مشاكل!")
@@ -140,7 +171,7 @@ elif selected == "التذاكر":
         for i, row in active.iterrows():
             with st.expander(f"#{row['id']} {row['issue_type']} - {row['username']}"):
                 st.write(row['description'])
-                if st.button("إغلاق التذكرة", key=f"c{row['id']}"):
+                if st.button("إغلاق", key=f"c{row['id']}"):
                     conn = sqlite3.connect('tickets.db')
                     conn.execute("UPDATE tickets SET status='مغلق' WHERE id=?", (row['id'],))
                     conn.commit()
