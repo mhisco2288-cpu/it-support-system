@@ -1,9 +1,0 @@
-streamlit
-pandas
-python-telegram-bot
-streamlit-lottie
-streamlit-option-menu
-requests
-nest_asyncio
-plotly
-openpyxl
