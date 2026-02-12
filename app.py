@@ -155,3 +155,4 @@ elif selected == "الأرشيف":
     st.markdown("### 🗄️ الأرشيف")
     st.dataframe(df[df['status'] == 'مغلق'], use_container_width=True)
 
+
